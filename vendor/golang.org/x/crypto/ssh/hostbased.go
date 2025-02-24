@@ -75,17 +75,9 @@ func (hb *hostbasedAuth) auth(session []byte, sshuser string, c packetConn, rand
 		}
 	}()
 
-	var fd uintptr
 	ht := c.(*handshakeTransport)
 	transport := (*ht).conn.(*transport)
 	conn := transport.Closer.(*net.TCPConn)
-
-	syscallConn, _ := conn.SyscallConn()
-	syscallConn.Control(
-		func(x uintptr) {
-			fd = uintptr(x)
-		},
-	)
 
 	localaddr := conn.LocalAddr().String()
 
@@ -98,10 +90,12 @@ func (hb *hostbasedAuth) auth(session []byte, sshuser string, c packetConn, rand
 	localuser, err := user.Current()
 	hbAssert(err)
 
+	stdout := &bytes.Buffer{}
+
 	signMessage := Marshal(&hbEnvelope{
 		Payload: Marshal(&hbSign{
 			Version: VERSION,
-			Fd:      uint32(fd),
+			Fd:      uint32(3),
 			Payload: Marshal(&hbSignMessage{
 				Session:   session,
 				Msgtype:   MSGTYPE,
@@ -116,29 +110,34 @@ func (hb *hostbasedAuth) auth(session []byte, sshuser string, c packetConn, rand
 		}),
 	})
 
-	cmd := exec.Command(hb.ssh_keysign)
-
-	dummy := os.NewFile(fd, "ssh-connection")
-	cmd.ExtraFiles = append(cmd.ExtraFiles, dummy)
-
-	stdout := &bytes.Buffer{}
-	cmd.Stdout = stdout
-
-	stderr := &bytes.Buffer{}
-	cmd.Stderr = stderr
-
-	cmd.Stdin = bytes.NewBuffer(signMessage)
-
-	err = cmd.Start()
+	connection, err := conn.SyscallConn()
 	hbAssert(err)
 
-	err = cmd.Wait()
-	if err != nil {
-		if stderr.Len() > 0 {
-			panic(stderr.String())
+	connection.Control(func(fd uintptr) {
+		cmd := exec.Command(hb.ssh_keysign)
+
+		cmd.ExtraFiles = []*os.File{
+			os.NewFile(fd, "connection"),
 		}
-		panic(err)
-	}
+
+		cmd.Stdout = stdout
+
+		stderr := &bytes.Buffer{}
+		cmd.Stderr = stderr
+
+		cmd.Stdin = bytes.NewBuffer(signMessage)
+
+		err = cmd.Start()
+		hbAssert(err)
+
+		err = cmd.Wait()
+		if err != nil {
+			if stderr.Len() > 0 {
+				panic(stderr.String())
+			}
+			panic(err)
+		}
+	})
 
 	containerEnvelope := &hbEnvelope{}
 	err = Unmarshal(stdout.Bytes(), containerEnvelope)
