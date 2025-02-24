@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"time"
 
 	"golang.org/x/crypto/ssh"
 )
@@ -23,17 +24,19 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+
+	defer client.Close()
+	defer session.Close()
+
 	out, err := session.CombinedOutput(os.Args[3])
 	if err != nil {
 		panic(err)
 	}
 
-	fmt.Println(string(out))
-	client.Close()
+	fmt.Print(string(out))
 }
 
 func connectToHost(user, host string) (*ssh.Client, *ssh.Session, error) {
-
 	hostkey := &bytes.Buffer{}
 	client, err := ssh.Dial("tcp", host, &ssh.ClientConfig{
 		User: user,
@@ -43,6 +46,7 @@ func connectToHost(user, host string) (*ssh.Client, *ssh.Session, error) {
 				ssh_keysign,
 			),
 		},
+		Timeout: time.Duration(30 * time.Second),
 		HostKeyCallback: func(hostname string, remote net.Addr, key ssh.PublicKey) error {
 			hostkey.Write(key.Marshal())
 			return nil
