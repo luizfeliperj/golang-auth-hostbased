@@ -17,7 +17,7 @@ $(ROOT_DIR)/vendor/modules.txt:
 $(ROOT_DIR)/vendor/golang.org/x/crypto/ssh/hostbased.go: $(ROOT_DIR)/vendor/modules.txt
 	$(GIT) checkout -f $@
 
-golang-auth-hostbased: main.go $(ROOT_DIR)/vendor/modules.txt $(ROOT_DIR)/vendor/golang.org/x/crypto/ssh/hostbased.go
+golang-auth-hostbased: main.go $(ROOT_DIR)/vendor/golang.org/x/crypto/ssh/hostbased.go
 	$(GOLANG) build -ldflags="-w -s" -trimpath -o $(ROOT_DIR)/$@
 
 .PHONY: clean
